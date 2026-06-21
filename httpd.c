@@ -48,6 +48,7 @@ int main()
 {
     short n = 4000;
     int fd = startup(&n);
+    char buf[1024] = "Yes I read!";
 
     while(1)
     {
@@ -59,8 +60,11 @@ int main()
         }
         printf("成功接受连接！\n");
 
-        const char *http_response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 13\r\n\r\nHello, World!";
-        send(connfd, http_response, strlen(http_response), 0);
+        if(write(connfd, buf, strlen(buf)) < 0)
+        {
+            perror("write 111");
+            exit(EXIT_FAILURE);
+        }
 
         close(connfd);
         printf("成功断开连接！\n");
