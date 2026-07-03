@@ -10,14 +10,24 @@
 #include<sys/types.h>
 
 #define ISspace(x) isspace((int)(x))
+#define SERVER_STRING "Server: jdbhttpd/0.1.0\r\n"
+
+void accept_request();
+int startup();
+int get_line();
+void not_found();
+void serve_file();
+void headers();
+void cat();
+void execute_cgi();
 
 void accept_request(int client)
 {
     int n = 0;
-    char buf[254];
+    char buf[1024];
     char url[254];
-    char method[254];
-    char path[254];
+    char method[255];
+    char path[512];
     int cgi = 0;
     int i = 0;
     int j = 0;
@@ -32,7 +42,7 @@ void accept_request(int client)
     }
     method[i] = '\0';
 
-    if(!strcasecmp(method, 'POST'))
+    if(!strcasecmp(method, "POST"))
     {
         cgi = 1;
     }
@@ -52,7 +62,7 @@ void accept_request(int client)
     }
     url[i] = '\0';
 
-    if(!strcasecmp(method, 'GET'))
+    if(!strcasecmp(method, "GET"))
     {
         query_string = url;
         while((*query_string != '?') && (*query_string != '\0'))
@@ -67,13 +77,17 @@ void accept_request(int client)
         }
     }
     sprintf(path, "htdocs%s", url);
-    if(path[strlen(path)-1] == "/")
+    if(path[strlen(path)-1] == '/')
     {
-        strcat(path, '/index.html');
+        strcat(path, "/index.html");
     }
 
     if(stat(path, &st) == -1)
     {
+        while((n > 0) && strcmp("\n", buf))
+        {
+            n = get_line(client, buf, sizeof(buf));
+        }
         not_found();
     }
     else
@@ -90,13 +104,14 @@ void accept_request(int client)
         }
         if(!cgi)
         {
-            serve_file();
+            serve_file(client, path);
         }
         else
         {
             execute_cgi();
         }
     }
+    close(client);
 }
 
 int startup(short *port)
@@ -174,24 +189,66 @@ int get_line(int client, char *buf, int size)
 
 void not_found()
 {
-
+    exit(1);
 }
 
-void serve_file()
+void serve_file(int client, char *path)
 {
+    FILE *Document = NULL;
+    int n = 1;
+    char buf[1024];
+    buf[0] = 'A';
+    buf[1] = '\0';
+    while((n > 0) && strcmp("\n", buf))
+    {
+        n = get_line(client, buf, sizeof(buf));
+    }
+    Document = fopen(path, "r");
+    if(Document == NULL)
+    {
+        not_found();
+    }
+    else
+    {
+        headers(client);
+        cat(client,Document);
+    }
+}
 
+void headers(int client)
+{
+    char buf[1024];
+    strcpy(buf, "HTTP/1.1 200 OK\r\n");
+    send(client, buf, strlen(buf), 0);
+    strcpy(buf, SERVER_STRING);
+    send(client, buf, strlen(buf), 0);
+    strcpy(buf, "Content-Type: text/html\r\n");
+    send(client, buf, strlen(buf), 0);
+    strcpy(buf, "\r\n");
+    send(client, buf, strlen(buf), 0);
+}
+
+void cat(int client, FILE *Document)
+{
+    char buf[1024];
+    fgets(buf, sizeof(buf), Document);
+    while(feof(Document) == 0)
+    {
+        send(client, buf, strlen(buf), 0);
+        fgets(buf, sizeof(buf), Document);
+    }
+    send(client, buf, strlen(buf), 0);
 }
 
 void execute_cgi()
 {
-
+    exit(1);
 }
 
 int main()
 {
     short n = 4000;
     int fd = startup(&n);
-    char buf[1024] = "Yes I read!";
 
     while(1)
     {
@@ -203,11 +260,7 @@ int main()
         }
         printf("成功接受连接！\n");
 
-        if(write(connfd, buf, strlen(buf)) < 0)
-        {
-            perror("write 111");
-            exit(EXIT_FAILURE);
-        }
+        accept_request(connfd);
 
         close(connfd);
         printf("成功断开连接！\n");
