@@ -275,7 +275,7 @@ void execute_cgi(int client, const char *method, const char *query_string,
                  const char *path)
 {
     int n = 1;
-    int data_length;
+    int data_length = -1;
     pid_t pid;
     char buf[255];
     char c;
@@ -297,7 +297,7 @@ void execute_cgi(int client, const char *method, const char *query_string,
 
         while((n > 0) && strcmp("\n", buf))
         {
-            if(strcmp("Content-Length:", buf))
+            if(strcasecmp(buf, "Content-Length:") == 0)
             {
                 data_length = atoi(&buf[16]);
             }
@@ -345,16 +345,16 @@ void execute_cgi(int client, const char *method, const char *query_string,
         close(cgi_input[1]);
         close(cgi_output[0]);
 
-        sprintf(meth_env, "REQUEST_METHOD = %s", method);
+        sprintf(meth_env, "REQUEST_METHOD=%s", method);
         putenv(meth_env);
         if(!strcasecmp(method, "GET"))
         {
-            sprintf(query_env, "QUERY_STRING = %s", query_string);
+            sprintf(query_env, "QUERY_STRING=%s", query_string);
             putenv(query_env);
         }
         else
         {
-            sprintf(length_env, "CONTENT_LENGTH = %d", data_length);
+            sprintf(length_env, "CONTENT_LENGTH=%d", data_length);
             putenv(length_env);
         }
         execl(path,path,NULL);
@@ -372,11 +372,11 @@ void execute_cgi(int client, const char *method, const char *query_string,
                 write(cgi_input[1], &c, 1);
             }
         }
+        close(cgi_input[1]);
         while(read(cgi_output[0], &c, 1) > 0)
         {
             send(client, &c, 1, 0);
         }
-        close(cgi_input[1]);
         close(cgi_output[0]);
 
         waitpid(pid, &status, 0);
